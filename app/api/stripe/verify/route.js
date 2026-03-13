@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import stripe from '@/lib/stripe';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function GET(request) {
   try {
@@ -12,9 +13,23 @@ export async function GET(request) {
     }
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const active = session.payment_status === 'paid' || session.status === 'complete';
+
+    // Persist subscription status to Firestore so it survives page refresh
+    if (active) {
+      const uid = session.metadata?.firebaseUid;
+      if (uid) {
+        await getAdminDb().collection('users').doc(uid).update({
+          subscribed: true,
+          stripeSubscriptionId: session.subscription,
+          stripeCustomerId: session.customer,
+          subscribedAt: new Date().toISOString(),
+        });
+      }
+    }
 
     return NextResponse.json({
-      active: session.payment_status === 'paid' || session.status === 'complete',
+      active,
       customerId: session.customer,
       subscriptionId: session.subscription,
     });

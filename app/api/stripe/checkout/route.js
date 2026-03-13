@@ -44,8 +44,8 @@ export async function POST(request) {
       subscription_data: {
         trial_period_days: 7,
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}?paid=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}?cancelled=true`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://localhost:3000'}?paid=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://localhost:3000'}?cancelled=true`,
       metadata: {
         firebaseUid: user.uid,
       },

@@ -58,6 +58,19 @@ const API = {
     const url = region === "UK" ? "https://ukpickleball.org/api/events" : "https://usapickleball.org/api/v1/tournaments";
     return fetch(url).then(r => r.json()).catch(() => []);
   },
+  // Phone OTP
+  async sendPhoneOTP(phone) {
+    return fetch("/api/auth/phone", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    }).then(r => r.json());
+  },
+  async verifyPhoneOTP(phone, code) {
+    return fetch("/api/auth/phone/verify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code }),
+    }).then(r => r.json());
+  },
 };
 
 // ── Icons ──────────────────────────────────────────────────
@@ -104,15 +117,7 @@ const CSS = `
 `;
 
 // ── Data ───────────────────────────────────────────────────
-const DEFAULT_GEAR = [
-  { id:"g1",item:"Primary Paddle",cat:"Equipment",c:false },{ id:"g2",item:"Backup Paddle",cat:"Equipment",c:false },
-  { id:"g3",item:"Tournament Balls (6-pack)",cat:"Equipment",c:false },{ id:"g4",item:"Grip Tape",cat:"Equipment",c:false },
-  { id:"g5",item:"Court Shoes",cat:"Apparel",c:false },{ id:"g6",item:"Shirts (x3)",cat:"Apparel",c:false },
-  { id:"g7",item:"Compression Socks",cat:"Apparel",c:false },{ id:"g8",item:"Water Bottle (64oz)",cat:"Nutrition",c:false },
-  { id:"g9",item:"Electrolyte Packs",cat:"Nutrition",c:false },{ id:"g10",item:"Energy Bars",cat:"Nutrition",c:false },
-  { id:"g11",item:"Sunscreen SPF 50",cat:"Other",c:false },{ id:"g12",item:"Towel",cat:"Other",c:false },
-  { id:"g13",item:"First Aid Kit",cat:"Other",c:false },
-];
+const DEFAULT_GEAR = [];
 
 // ── Add Form Modal ───────────────────────────────────────
 function AddModal({ title, fields, onSave, onClose, sz }) {
@@ -231,8 +236,10 @@ const Tag = ({ children, bg, color: c, border: bd, style: sx }) => (
 // ════════════════════════════════════════════════════════════
 function LoginScreen({ onLogin, sz }) {
   const [mode, setMode] = useState("login"); // login | signup
+  const [loginMethod, setLoginMethod] = useState("email"); // email | phone | otp
   const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [showPw, setShowPw] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -245,17 +252,38 @@ function LoginScreen({ onLogin, sz }) {
       const res = mode === "signup"
         ? await API.signup(form.name, form.email, form.password)
         : await API.login(form.email, form.password);
-      if (res.error) {
-        setError(res.error);
-        setLoading(false);
-      } else {
-        onLogin(res.user);
-      }
-    } catch (err) {
-      setError("Something went wrong. Please try again.");
-      setLoading(false);
-    }
+      if (res.error) { setError(res.error); setLoading(false); }
+      else { onLogin(res.user); }
+    } catch { setError("Something went wrong. Please try again."); setLoading(false); }
   };
+
+  const handlePhoneSend = async () => {
+    if (!phone.trim()) return setError("Enter your phone number");
+    setError(""); setLoading(true);
+    try {
+      const res = await API.sendPhoneOTP(phone.trim());
+      if (res.error) { setError(res.error); setLoading(false); }
+      else { setLoginMethod("otp"); setLoading(false); }
+    } catch { setError("Failed to send code"); setLoading(false); }
+  };
+
+  const handleOTPVerify = async () => {
+    if (otpCode.length < 6) return setError("Enter the 6-digit code");
+    setError(""); setLoading(true);
+    try {
+      const res = await API.verifyPhoneOTP(phone.trim(), otpCode.trim());
+      if (res.error) { setError(res.error); setLoading(false); }
+      else { onLogin(res.user); }
+    } catch { setError("Verification failed"); setLoading(false); }
+  };
+
+  const Divider = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}>
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+      <span style={{ fontSize: sz.xs, color: "var(--text3)", fontWeight: 600 }}>OR</span>
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(170deg,#f0fdf4 0%,#fff 40%,#f9fafb 100%)", fontFamily: "'Nunito',sans-serif", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 28px" }}>
@@ -267,48 +295,95 @@ function LoginScreen({ onLogin, sz }) {
         <p style={{ fontSize: sz.sm, color: "var(--green)", fontWeight: 700, letterSpacing: 3, textTransform: "uppercase" }}>Tournament Manager</p>
       </div>
 
-      <div className="anim a2" style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: sz.xl, fontWeight: 800, color: "var(--text)", textAlign: "center", marginBottom: 6 }}>
-          {mode === "login" ? "Welcome back" : "Create your account"}
-        </h2>
-        <p style={{ fontSize: sz.sm, color: "var(--text3)", textAlign: "center" }}>
-          {mode === "login" ? "Sign in to manage your tournaments" : "Join thousands of tournament players"}
-        </p>
-      </div>
-
-      <div className="anim a3" style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
-        {mode === "signup" && <Input sz={sz} icon={I.User()} placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />}
-        <Input sz={sz} icon={I.Mail()} placeholder="Email address" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-        <Input sz={sz} icon={I.Lock()} placeholder="Password" togglePw value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
-      </div>
-
-      {error && <div className="anim" style={{ color: "#dc2626", fontSize: sz.sm, textAlign: "center", marginBottom: 12, fontWeight: 600 }}>{error}</div>}
-
-      <div className="anim a4" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Btn primary full sz={sz} onClick={handleSubmit} style={{ opacity: loading ? .7 : 1 }}>
-          {loading ? "Signing in..." : mode === "login" ? "Sign In" : "Create Account"}
-        </Btn>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-          <span style={{ fontSize: sz.xs, color: "var(--text3)", fontWeight: 600 }}>OR</span>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+      {/* ── EMAIL / PASSWORD ── */}
+      {loginMethod === "email" && <>
+        <div className="anim a2" style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: sz.xl, fontWeight: 800, color: "var(--text)", textAlign: "center", marginBottom: 6 }}>
+            {mode === "login" ? "Welcome back" : "Create your account"}
+          </h2>
+          <p style={{ fontSize: sz.sm, color: "var(--text3)", textAlign: "center" }}>
+            {mode === "login" ? "Sign in to manage your tournaments" : "Join thousands of tournament players"}
+          </p>
         </div>
 
-        <Btn full sz={sz} onClick={() => API.googleAuth()} style={{ gap: 10 }}>
-          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          Continue with Google
-        </Btn>
-      </div>
+        <div className="anim a3" style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
+          {mode === "signup" && <Input sz={sz} icon={I.User()} placeholder="Full name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />}
+          <Input sz={sz} icon={I.Mail()} placeholder="Email address" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+          <Input sz={sz} icon={I.Lock()} placeholder="Password" togglePw value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+        </div>
 
-      <div className="anim a5" style={{ textAlign: "center", marginTop: 24 }}>
-        <span style={{ fontSize: sz.sm, color: "var(--text3)" }}>
-          {mode === "login" ? "New to Dink? " : "Already have an account? "}
-        </span>
-        <span onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} style={{ fontSize: sz.sm, color: "var(--green)", fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
-          {mode === "login" ? "Create account" : "Sign in"}
-        </span>
-      </div>
+        {error && <div className="anim" style={{ color: "#dc2626", fontSize: sz.sm, textAlign: "center", marginBottom: 12, fontWeight: 600 }}>{error}</div>}
+
+        <div className="anim a4" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Btn primary full sz={sz} onClick={handleSubmit} style={{ opacity: loading ? .7 : 1 }}>
+            {loading ? "Signing in..." : mode === "login" ? "Sign In" : "Create Account"}
+          </Btn>
+          <Divider />
+          <Btn full sz={sz} onClick={() => API.googleAuth()} style={{ gap: 10 }}>
+            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Continue with Google
+          </Btn>
+          <Btn full sz={sz} onClick={() => { setLoginMethod("phone"); setError(""); }} style={{ gap: 10 }}>
+            {I.Phone(18)} Sign in with Phone
+          </Btn>
+        </div>
+
+        <div className="anim a5" style={{ textAlign: "center", marginTop: 24 }}>
+          <span style={{ fontSize: sz.sm, color: "var(--text3)" }}>
+            {mode === "login" ? "New to Dink? " : "Already have an account? "}
+          </span>
+          <span onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} style={{ fontSize: sz.sm, color: "var(--green)", fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+            {mode === "login" ? "Create account" : "Sign in"}
+          </span>
+        </div>
+      </>}
+
+      {/* ── PHONE NUMBER ENTRY ── */}
+      {loginMethod === "phone" && <>
+        <div className="anim a2" style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: sz.xl, fontWeight: 800, color: "var(--text)", textAlign: "center", marginBottom: 6 }}>Sign in with Phone</h2>
+          <p style={{ fontSize: sz.sm, color: "var(--text3)", textAlign: "center" }}>We'll text you a 6-digit code</p>
+        </div>
+        <div className="anim a3" style={{ marginBottom: 20 }}>
+          <Input sz={sz} icon={I.Phone()} placeholder="+1 555 000 0000" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+        </div>
+        {error && <div className="anim" style={{ color: "#dc2626", fontSize: sz.sm, textAlign: "center", marginBottom: 12, fontWeight: 600 }}>{error}</div>}
+        <div className="anim a4" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Btn primary full sz={sz} onClick={handlePhoneSend} style={{ opacity: loading ? .7 : 1 }}>
+            {loading ? "Sending..." : "Send Code"}
+          </Btn>
+          <span onClick={() => { setLoginMethod("email"); setError(""); }} style={{ textAlign: "center", fontSize: sz.sm, color: "var(--text3)", cursor: "pointer" }}>← Back to email</span>
+        </div>
+      </>}
+
+      {/* ── OTP CODE ENTRY ── */}
+      {loginMethod === "otp" && <>
+        <div className="anim a2" style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: sz.xl, fontWeight: 800, color: "var(--text)", textAlign: "center", marginBottom: 6 }}>Enter your code</h2>
+          <p style={{ fontSize: sz.sm, color: "var(--text3)", textAlign: "center" }}>Sent to {phone}</p>
+        </div>
+        <div className="anim a3" style={{ marginBottom: 20 }}>
+          <input
+            type="number"
+            placeholder="123456"
+            value={otpCode}
+            onChange={e => setOtpCode(e.target.value.slice(0, 6))}
+            style={{ width: "100%", padding: "18px", borderRadius: 14, border: "2px solid var(--border)", background: "#f9fafb", fontSize: sz.xxl, fontFamily: "'JetBrains Mono',monospace", color: "var(--text)", outline: "none", textAlign: "center", letterSpacing: 12, transition: "border .2s" }}
+            onFocus={e => e.target.style.borderColor = "#22c55e"}
+            onBlur={e => e.target.style.borderColor = "#e5e7eb"}
+          />
+        </div>
+        {error && <div className="anim" style={{ color: "#dc2626", fontSize: sz.sm, textAlign: "center", marginBottom: 12, fontWeight: 600 }}>{error}</div>}
+        <div className="anim a4" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Btn primary full sz={sz} onClick={handleOTPVerify} style={{ opacity: loading ? .7 : 1 }}>
+            {loading ? "Verifying..." : "Verify Code"}
+          </Btn>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span onClick={() => { setLoginMethod("phone"); setOtpCode(""); setError(""); }} style={{ fontSize: sz.sm, color: "var(--text3)", cursor: "pointer" }}>← Change number</span>
+            <span onClick={handlePhoneSend} style={{ fontSize: sz.sm, color: "var(--green)", fontWeight: 700, cursor: "pointer" }}>Resend code</span>
+          </div>
+        </div>
+      </>}
     </div>
   );
 }
