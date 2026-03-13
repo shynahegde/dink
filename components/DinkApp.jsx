@@ -379,8 +379,6 @@ export default function DinkApp() {
   const [fontSz, setFontSz] = useState("medium");
   const [showSettings, setShowSettings] = useState(false);
   const [selTourn, setSelTourn] = useState(null);
-  const [gear, setGear] = useState(DATA.gear);
-
   // Check for OAuth/Stripe redirects and existing session on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
